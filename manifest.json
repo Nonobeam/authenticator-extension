@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Local Authenticator",
+  "description": "A lightweight local authenticator extension with TOTP and HOTP support.",
+  "version": "1.0.0",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "Local Authenticator",
+    "default_popup": "popup/popup.html"
+  }
+}

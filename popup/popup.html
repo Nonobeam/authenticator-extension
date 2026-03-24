@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local Authenticator</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>Local Authenticator</h1>
+        <button id="add-account-btn" class="btn btn-primary" type="button">Add Key</button>
+      </header>
+
+      <p id="message" class="message hidden" role="status" aria-live="polite"></p>
+
+      <section id="accounts-container" class="accounts" aria-live="polite"></section>
+    </main>
+
+    <dialog id="account-dialog" class="account-dialog">
+      <form id="account-form" class="account-form" method="dialog" novalidate>
+        <h2 id="dialog-title">Add key</h2>
+
+        <input type="hidden" id="account-id" name="id" />
+
+        <label for="account-label">Name</label>
+        <input id="account-label" name="label" type="text" maxlength="80" required />
+
+        <label for="account-secret">Secret (Base32)</label>
+        <input id="account-secret" name="secret" type="text" autocomplete="off" spellcheck="false" required />
+
+        <label for="account-type">Type</label>
+        <select id="account-type" name="type">
+          <option value="totp">Time-based (TOTP)</option>
+          <option value="hotp">Counter-based (HOTP)</option>
+        </select>
+
+        <label for="account-digits">Digits</label>
+        <select id="account-digits" name="digits">
+          <option value="6">6</option>
+          <option value="8">8</option>
+        </select>
+
+        <div id="totp-field-group">
+          <label for="account-period">Period (seconds)</label>
+          <input id="account-period" name="period" type="number" min="1" step="1" value="30" />
+        </div>
+
+        <div id="hotp-field-group" class="hidden">
+          <label for="account-counter">Counter</label>
+          <input id="account-counter" name="counter" type="number" min="0" step="1" value="0" />
+        </div>
+
+        <p id="form-error" class="error hidden" role="alert"></p>
+
+        <div class="dialog-actions">
+          <button id="cancel-btn" class="btn" type="button">Cancel</button>
+          <button class="btn btn-primary" type="submit">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="./popup.js"></script>
+  </body>
+</html>
