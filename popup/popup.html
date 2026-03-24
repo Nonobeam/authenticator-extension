@@ -17,6 +17,7 @@
             </span>
           </button>
           <button id="add-account-btn" class="btn btn-primary" type="button">Add Key</button>
+          <button id="profile-btn" class="btn" type="button">Profile</button>
         </div>
       </header>
 
@@ -95,6 +96,29 @@
           <button class="btn btn-primary" type="submit">Save</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="profile-dialog" class="account-dialog profile-dialog">
+      <div class="account-form">
+        <h2>Profile backup</h2>
+
+        <p class="add-method-help">Export all keys and settings to Base64, or paste Base64 to restore.</p>
+
+        <div class="profile-actions">
+          <button id="export-profile-btn" class="btn btn-primary" type="button">Export Base64</button>
+          <button id="copy-export-btn" class="btn" type="button">Copy Export</button>
+        </div>
+
+        <label for="profile-data">Base64 profile data</label>
+        <textarea id="profile-data" rows="5" spellcheck="false" placeholder="Paste exported Base64 here"></textarea>
+
+        <p id="profile-form-error" class="error hidden" role="alert"></p>
+
+        <div class="dialog-actions">
+          <button id="profile-cancel-btn" class="btn" type="button">Close</button>
+          <button id="import-profile-btn" class="btn btn-primary" type="button">Import Base64</button>
+        </div>
+      </div>
     </dialog>
 
     <script type="module" src="./popup.js"></script>

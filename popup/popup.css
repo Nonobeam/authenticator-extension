@@ -401,6 +401,16 @@ body {
   gap: 8px;
 }
 
+.profile-dialog {
+  width: 360px;
+}
+
+.profile-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .account-form h2 {
   margin: 0 0 2px;
   font-size: 16px;

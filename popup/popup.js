@@ -5,6 +5,7 @@ import {
   getAccounts,
   getTheme,
   incrementHotpCounter,
+  saveAccounts,
   saveTheme,
   updateAccount
 } from "../src/storage.js";
@@ -12,6 +13,7 @@ import { validateAccountInput } from "../src/validation.js";
 import { parseOtpAuthUri } from "../src/otpauth.js";
 
 const addAccountButton = document.querySelector("#add-account-btn");
+const profileButton = document.querySelector("#profile-btn");
 const themeToggleButton = document.querySelector("#theme-toggle-btn");
 const accountsContainer = document.querySelector("#accounts-container");
 const messageElement = document.querySelector("#message");
@@ -42,6 +44,14 @@ const uriForm = document.querySelector("#uri-form");
 const uriInput = document.querySelector("#uri-input");
 const uriFormError = document.querySelector("#uri-form-error");
 const uriCancelButton = document.querySelector("#uri-cancel-btn");
+
+const profileDialog = document.querySelector("#profile-dialog");
+const exportProfileButton = document.querySelector("#export-profile-btn");
+const copyExportButton = document.querySelector("#copy-export-btn");
+const importProfileButton = document.querySelector("#import-profile-btn");
+const profileCancelButton = document.querySelector("#profile-cancel-btn");
+const profileDataInput = document.querySelector("#profile-data");
+const profileFormError = document.querySelector("#profile-form-error");
 
 let accounts = [];
 const hotpDisplayCodes = new Map();
@@ -106,6 +116,16 @@ function setUriFormError(text) {
 function clearUriFormError() {
   uriFormError.textContent = "";
   uriFormError.classList.add("hidden");
+}
+
+function setProfileFormError(text) {
+  profileFormError.textContent = text;
+  profileFormError.classList.remove("hidden");
+}
+
+function clearProfileFormError() {
+  profileFormError.textContent = "";
+  profileFormError.classList.add("hidden");
 }
 
 function applyTheme(theme) {
@@ -173,6 +193,11 @@ function resetUriFormDefaults() {
   clearUriFormError();
 }
 
+function resetProfileFormDefaults() {
+  profileDataInput.value = "";
+  clearProfileFormError();
+}
+
 function openAddMethodDialog() {
   hideAllMenus();
 
@@ -202,6 +227,18 @@ function openUriDialog() {
   resetUriFormDefaults();
   uriDialog.showModal();
   uriInput.focus();
+}
+
+function openProfileDialog() {
+  hideAllMenus();
+
+  if (!profileDialog) {
+    return;
+  }
+
+  resetProfileFormDefaults();
+  profileDialog.showModal();
+  profileDataInput.focus();
 }
 
 function openEditDialog(accountId) {
@@ -402,6 +439,129 @@ function buildRawInputFromUri(parsed) {
     period: String(parsed.period),
     counter: String(parsed.counter)
   };
+}
+
+function toBase64(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary);
+}
+
+function fromBase64(base64Text) {
+  const binary = atob(base64Text);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function buildProfilePayload() {
+  return {
+    version: 1,
+    exportedAt: Date.now(),
+    theme: currentTheme,
+    accounts: accounts.map((account) => ({ ...account }))
+  };
+}
+
+function normalizeImportedProfile(raw) {
+  const payload = typeof raw === "object" && raw ? raw : {};
+
+  if (payload.version !== undefined && Number(payload.version) !== 1) {
+    throw new Error("Unsupported profile format version.");
+  }
+
+  const rawAccounts = Array.isArray(payload.accounts) ? payload.accounts : [];
+  const now = Date.now();
+
+  const normalizedAccounts = rawAccounts.map((account) => {
+    const validated = validateAccountInput(account);
+    const idCandidate = typeof account?.id === "string" ? account.id.trim() : "";
+    const createdAtInput = Number(account?.createdAt);
+    const updatedAtInput = Number(account?.updatedAt);
+
+    return {
+      id: idCandidate || crypto.randomUUID(),
+      ...validated,
+      createdAt: Number.isFinite(createdAtInput) && createdAtInput > 0 ? createdAtInput : now,
+      updatedAt: Number.isFinite(updatedAtInput) && updatedAtInput > 0 ? updatedAtInput : now
+    };
+  });
+
+  const theme = payload.theme === "dark" ? "dark" : "light";
+
+  return {
+    theme,
+    accounts: normalizedAccounts
+  };
+}
+
+async function handleExportProfile() {
+  clearProfileFormError();
+
+  try {
+    const payload = buildProfilePayload();
+    const encoded = toBase64(JSON.stringify(payload));
+    profileDataInput.value = encoded;
+    showMessage("Profile exported.");
+  } catch (error) {
+    setProfileFormError(getErrorMessage(error, "Unable to export profile."));
+  }
+}
+
+async function handleCopyExportProfile() {
+  clearProfileFormError();
+
+  if (!profileDataInput.value.trim()) {
+    await handleExportProfile();
+  }
+
+  const encoded = profileDataInput.value.trim();
+
+  if (!encoded) {
+    setProfileFormError("No Base64 profile data to copy.");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(encoded);
+    showMessage("Profile Base64 copied.");
+  } catch {
+    showMessage("Unable to copy profile data. Please copy it manually.", true);
+  }
+}
+
+async function handleImportProfile() {
+  clearProfileFormError();
+
+  const encoded = profileDataInput.value.trim();
+
+  if (!encoded) {
+    setProfileFormError("Base64 profile data is required.");
+    return;
+  }
+
+  try {
+    const decoded = fromBase64(encoded);
+    const parsed = JSON.parse(decoded);
+    const normalized = normalizeImportedProfile(parsed);
+
+    await saveAccounts(normalized.accounts);
+    await saveTheme(normalized.theme);
+    applyTheme(normalized.theme);
+
+    hotpDisplayCodes.clear();
+    await reloadAccounts();
+    await renderAccounts();
+
+    profileDialog.close();
+    showMessage("Profile imported.");
+  } catch (error) {
+    setProfileFormError(getErrorMessage(error, "Invalid Base64 profile data."));
+  }
 }
 
 async function handleSaveAccount(event) {
@@ -627,6 +787,7 @@ async function init() {
 
   themeToggleButton?.addEventListener("click", handleToggleTheme);
   addAccountButton.addEventListener("click", openAddMethodDialog);
+  profileButton?.addEventListener("click", openProfileDialog);
   addMethodCancelButton?.addEventListener("click", () => addMethodDialog.close());
   addNewButton?.addEventListener("click", () => {
     addMethodDialog.close();
@@ -638,6 +799,10 @@ async function init() {
   });
   cancelButton.addEventListener("click", () => accountDialog.close());
   uriCancelButton?.addEventListener("click", () => uriDialog.close());
+  profileCancelButton?.addEventListener("click", () => profileDialog.close());
+  exportProfileButton?.addEventListener("click", handleExportProfile);
+  copyExportButton?.addEventListener("click", handleCopyExportProfile);
+  importProfileButton?.addEventListener("click", handleImportProfile);
   accountTypeInput.addEventListener("change", toggleTypeFields);
   accountForm.addEventListener("submit", handleSaveAccount);
   uriForm?.addEventListener("submit", handleSaveUriAccount);
