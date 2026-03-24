@@ -18,7 +18,7 @@ This project is built with plain HTML, CSS, and JavaScript, and is designed to r
 - Add new authenticator keys
 - Edit key details (including name)
 - Delete saved keys
-- Generate TOTP codes with refresh countdown
+- Generate TOTP codes with Google Authenticator defaults (HMAC-SHA1, 6 digits, 30-second period)
 - Generate HOTP codes with explicit counter increment behavior
 - Persist key data in `chrome.storage.local`
 

@@ -20,6 +20,7 @@ const accountLabelInput = document.querySelector("#account-label");
 const accountSecretInput = document.querySelector("#account-secret");
 const accountTypeInput = document.querySelector("#account-type");
 const accountDigitsInput = document.querySelector("#account-digits");
+const accountDigitsLabel = document.querySelector('label[for="account-digits"]');
 const accountPeriodInput = document.querySelector("#account-period");
 const accountCounterInput = document.querySelector("#account-counter");
 const totpFieldGroup = document.querySelector("#totp-field-group");
@@ -33,6 +34,7 @@ let messageTimeoutId = null;
 let tickerId = null;
 let isRendering = false;
 let renderAgain = false;
+let openMenuAccountId = null;
 
 function escapeHtml(value) {
   return String(value)
@@ -84,6 +86,22 @@ function toggleTypeFields() {
   const isTotp = accountTypeInput.value === "totp";
   totpFieldGroup.classList.toggle("hidden", !isTotp);
   hotpFieldGroup.classList.toggle("hidden", isTotp);
+
+  if (isTotp) {
+    accountDigitsInput.value = "6";
+    accountDigitsInput.disabled = true;
+    accountPeriodInput.value = "30";
+
+    if (accountDigitsLabel) {
+      accountDigitsLabel.textContent = "Digits (fixed to 6 for TOTP)";
+    }
+  } else {
+    accountDigitsInput.disabled = false;
+
+    if (accountDigitsLabel) {
+      accountDigitsLabel.textContent = "Digits";
+    }
+  }
 }
 
 function resetFormDefaults() {
@@ -98,6 +116,7 @@ function resetFormDefaults() {
 }
 
 function openAddDialog() {
+  hideAllMenus();
   dialogTitle.textContent = "Add key";
   resetFormDefaults();
   accountDialog.showModal();
@@ -112,6 +131,7 @@ function openEditDialog(accountId) {
     return;
   }
 
+  hideAllMenus();
   dialogTitle.textContent = "Edit key";
   clearFormError();
   accountIdInput.value = account.id;
@@ -142,9 +162,9 @@ async function copyCode(rawCode) {
 
 function normalizeAccount(account) {
   const type = account?.type === "hotp" ? "hotp" : "totp";
-  const digits = Number.isInteger(Number(account?.digits)) ? Number(account.digits) : 6;
-  const periodInput = Number(account?.period);
-  const period = Number.isInteger(periodInput) && periodInput > 0 ? periodInput : 30;
+  const digitsInput = Number(account?.digits);
+  const digits = type === "totp" ? 6 : digitsInput === 8 ? 8 : 6;
+  const period = 30;
   const counterInput = Number(account?.counter);
   const counter = Number.isInteger(counterInput) && counterInput >= 0 ? counterInput : 0;
 
@@ -153,7 +173,7 @@ function normalizeAccount(account) {
     label: String(account.label || ""),
     secretBase32: String(account.secretBase32 || ""),
     type,
-    digits: digits === 8 ? 8 : 6,
+    digits,
     period,
     counter,
     algorithm: "SHA-1",
@@ -168,6 +188,39 @@ async function reloadAccounts() {
   accounts.sort((left, right) =>
     left.label.localeCompare(right.label, undefined, { sensitivity: "base" })
   );
+
+  if (openMenuAccountId && !accounts.some((account) => account.id === openMenuAccountId)) {
+    openMenuAccountId = null;
+  }
+}
+
+function renderMenu(accountId) {
+  const escapedId = escapeHtml(accountId);
+  const isOpen = openMenuAccountId === accountId;
+
+  return `
+    <div class="menu-wrap menu-top">
+      <button class="btn menu-btn" type="button" data-action="toggle-menu" data-id="${escapedId}" aria-expanded="${
+    isOpen ? "true" : "false"
+  }" aria-haspopup="true">⋯</button>
+      <div class="menu${isOpen ? "" : " hidden"}" data-menu="${escapedId}">
+        <button class="menu-item" type="button" data-action="edit" data-id="${escapedId}">Edit</button>
+        <button class="menu-item menu-item-danger" type="button" data-action="delete" data-id="${escapedId}">Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderHeader(label, typeLabel, accountId) {
+  return `
+    <div class="account-header">
+      <h3 class="account-label">${label}</h3>
+      <div class="header-right">
+        <span class="account-type">${typeLabel}</span>
+        ${renderMenu(accountId)}
+      </div>
+    </div>
+  `;
 }
 
 async function renderAccounts() {
@@ -194,39 +247,25 @@ async function renderAccounts() {
             const result = await generateTotp(account);
             const code = result.code;
             const groupedCode = groupOtp(code);
-            const elapsed = result.period - result.remaining;
-            const progress = Math.min(100, Math.max(0, Math.round((elapsed / result.period) * 100)));
+            const progress = Math.min(100, Math.max(0, Math.round((result.remaining / result.period) * 100)));
 
             return `
               <article class="account-card">
-                <div class="account-header">
-                  <h3 class="account-label">${escapedLabel}</h3>
-                  <span class="account-type">${typeLabel}</span>
-                </div>
-                <p class="code">${escapeHtml(groupedCode)}</p>
-                <p class="meta">Refresh in ${result.remaining}s • ${account.digits} digits • ${result.period}s period</p>
-                <div class="progress-track" aria-hidden="true">
-                  <div class="progress-bar" style="width: ${progress}%;"></div>
-                </div>
-                <div class="actions">
-                  <button class="btn" type="button" data-action="copy" data-id="${escapeHtml(account.id)}" data-code="${code}">Copy</button>
-                  <button class="btn" type="button" data-action="edit" data-id="${escapeHtml(account.id)}">Edit</button>
-                  <button class="btn btn-danger" type="button" data-action="delete" data-id="${escapeHtml(account.id)}">Delete</button>
+                ${renderHeader(escapedLabel, typeLabel, account.id)}
+                <p class="code code-clickable" role="button" tabindex="0" data-action="copy" data-id="${escapeHtml(
+                  account.id
+                )}" data-code="${code}">${escapeHtml(groupedCode)}</p>
+                <div class="meta-row">
+                  <p class="meta">Refresh in ${result.remaining}s • 6 digits</p>
+                  <div class="pie" style="--progress: ${progress}%;" aria-hidden="true"></div>
                 </div>
               </article>
             `;
           } catch (error) {
             return `
               <article class="account-card">
-                <div class="account-header">
-                  <h3 class="account-label">${escapedLabel}</h3>
-                  <span class="account-type">${typeLabel}</span>
-                </div>
+                ${renderHeader(escapedLabel, typeLabel, account.id)}
                 <p class="meta">${escapeHtml(getErrorMessage(error, "Unable to generate TOTP code."))}</p>
-                <div class="actions">
-                  <button class="btn" type="button" data-action="edit" data-id="${escapeHtml(account.id)}">Edit</button>
-                  <button class="btn btn-danger" type="button" data-action="delete" data-id="${escapeHtml(account.id)}">Delete</button>
-                </div>
               </article>
             `;
           }
@@ -234,21 +273,18 @@ async function renderAccounts() {
 
         const hotpRawCode = hotpDisplayCodes.get(account.id) || "";
         const hotpGroupedCode = hotpRawCode ? groupOtp(hotpRawCode) : "------";
-        const copyDisabled = hotpRawCode ? "" : "disabled";
 
         return `
           <article class="account-card">
-            <div class="account-header">
-              <h3 class="account-label">${escapedLabel}</h3>
-              <span class="account-type">${typeLabel}</span>
-            </div>
-            <p class="code">${escapeHtml(hotpGroupedCode)}</p>
+            ${renderHeader(escapedLabel, typeLabel, account.id)}
+            <p class="code code-clickable" role="button" tabindex="0" data-action="copy" data-id="${escapeHtml(
+              account.id
+            )}" data-code="${escapeHtml(hotpRawCode)}">${escapeHtml(hotpGroupedCode)}</p>
             <p class="meta">Counter: ${account.counter} • ${account.digits} digits</p>
             <div class="actions">
-              <button class="btn btn-primary" type="button" data-action="generate-hotp" data-id="${escapeHtml(account.id)}">Generate</button>
-              <button class="btn" type="button" data-action="copy" data-id="${escapeHtml(account.id)}" data-code="${hotpRawCode}" ${copyDisabled}>Copy</button>
-              <button class="btn" type="button" data-action="edit" data-id="${escapeHtml(account.id)}">Edit</button>
-              <button class="btn btn-danger" type="button" data-action="delete" data-id="${escapeHtml(account.id)}">Delete</button>
+              <button class="btn btn-primary" type="button" data-action="generate-hotp" data-id="${escapeHtml(
+                account.id
+              )}">Generate</button>
             </div>
           </article>
         `;
@@ -363,15 +399,54 @@ async function handleGenerateHotp(accountId) {
   }
 }
 
-async function handleAccountsAction(event) {
-  const button = event.target.closest("button[data-action]");
+function hideAllMenus() {
+  openMenuAccountId = null;
 
-  if (!button) {
+  const menus = accountsContainer.querySelectorAll("[data-menu]");
+  menus.forEach((menu) => menu.classList.add("hidden"));
+
+  const toggles = accountsContainer.querySelectorAll("[data-action='toggle-menu']");
+  toggles.forEach((toggle) => toggle.setAttribute("aria-expanded", "false"));
+}
+
+function toggleMenu(button, accountId) {
+  const menuWrap = button.closest(".menu-wrap");
+  const menu = menuWrap?.querySelector("[data-menu]");
+
+  if (!menu) {
     return;
   }
 
-  const action = button.dataset.action;
-  const accountId = button.dataset.id || "";
+  const willOpen = openMenuAccountId !== accountId;
+  hideAllMenus();
+
+  if (willOpen) {
+    openMenuAccountId = accountId;
+    menu.classList.remove("hidden");
+    button.setAttribute("aria-expanded", "true");
+  }
+}
+
+async function handleAccountsAction(event) {
+  const actionElement = event.target.closest("[data-action]");
+
+  if (!actionElement || !accountsContainer.contains(actionElement)) {
+    hideAllMenus();
+    return;
+  }
+
+  const action = actionElement.dataset.action;
+  const accountId = actionElement.dataset.id || "";
+
+  if (action !== "toggle-menu") {
+    hideAllMenus();
+  }
+
+  if (action === "toggle-menu") {
+    event.stopPropagation();
+    toggleMenu(actionElement, accountId);
+    return;
+  }
 
   if (action === "edit") {
     openEditDialog(accountId);
@@ -389,8 +464,23 @@ async function handleAccountsAction(event) {
   }
 
   if (action === "copy") {
-    await copyCode(button.dataset.code || "");
+    await copyCode(actionElement.dataset.code || "");
   }
+}
+
+async function handleAccountsKeydown(event) {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+
+  const actionElement = event.target.closest("[data-action='copy']");
+
+  if (!actionElement || !accountsContainer.contains(actionElement)) {
+    return;
+  }
+
+  event.preventDefault();
+  await copyCode(actionElement.dataset.code || "");
 }
 
 function startTicker() {
@@ -416,6 +506,12 @@ async function init() {
   accountTypeInput.addEventListener("change", toggleTypeFields);
   accountForm.addEventListener("submit", handleSaveAccount);
   accountsContainer.addEventListener("click", handleAccountsAction);
+  accountsContainer.addEventListener("keydown", handleAccountsKeydown);
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".menu-wrap")) {
+      hideAllMenus();
+    }
+  });
 
   await reloadAccounts();
   await renderAccounts();

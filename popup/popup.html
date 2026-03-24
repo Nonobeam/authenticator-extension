@@ -42,9 +42,8 @@
           <option value="8">8</option>
         </select>
 
-        <div id="totp-field-group">
-          <label for="account-period">Period (seconds)</label>
-          <input id="account-period" name="period" type="number" min="1" step="1" value="30" />
+        <div id="totp-field-group" class="hidden">
+          <input id="account-period" name="period" type="hidden" value="30" />
         </div>
 
         <div id="hotp-field-group" class="hidden">
