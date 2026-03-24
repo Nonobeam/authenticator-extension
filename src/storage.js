@@ -1,4 +1,5 @@
 const STORAGE_KEY = "auth.accounts";
+const THEME_KEY = "auth.theme";
 
 export async function getAccounts() {
   const result = await chrome.storage.local.get(STORAGE_KEY);
@@ -48,4 +49,20 @@ export async function incrementHotpCounter(accountId) {
   });
 
   await saveAccounts(next);
+}
+
+export async function getTheme() {
+  const result = await chrome.storage.local.get(THEME_KEY);
+  const theme = result[THEME_KEY];
+
+  if (theme === "dark" || theme === "light") {
+    return theme;
+  }
+
+  return "light";
+}
+
+export async function saveTheme(theme) {
+  const value = theme === "dark" ? "dark" : "light";
+  await chrome.storage.local.set({ [THEME_KEY]: value });
 }

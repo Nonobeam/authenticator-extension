@@ -3,7 +3,7 @@
 ## Overview
 Local Authenticator is a non-profit, lightweight, open-source Chrome extension that generates one-time passcodes in your browser using TOTP (time-based) and HOTP (counter-based) methods.
 
-This project is built with plain HTML, CSS, and JavaScript, and is designed to run fully on your local machine.
+This project is built with plain HTML, CSS, and JavaScript, and runs fully on your local machine.
 
 ## Project Principles
 - **Non-profit**: This project is not built for commercial exploitation.
@@ -15,18 +15,26 @@ This project is built with plain HTML, CSS, and JavaScript, and is designed to r
 - **Fully local execution**: Data is stored only in `chrome.storage.local` on your browser profile.
 
 ## Features
-- Add new authenticator keys
-- Edit key details (including name)
-- Delete saved keys
-- Generate TOTP codes with Google Authenticator defaults (HMAC-SHA1, 6 digits, 30-second period)
-- Generate HOTP codes with explicit counter increment behavior
-- Persist key data in `chrome.storage.local`
+- Add key flow with two choices: **Add new** and **Add with URI**
+- URI import via `otpauth://` Key URI format
+- Manual key management (add, edit, delete)
+- TOTP generation with Google Authenticator defaults:
+  - Algorithm: HMAC-SHA1
+  - Digits: 6
+  - Period: 30 seconds
+- HOTP generation with explicit counter increment on **Generate**
+- Click OTP code to copy
+- Light/dark mode switch with persisted preference
+- Local persistence through `chrome.storage.local`
 
 ## Technical Notes
 - Manifest Version: Chrome Extension Manifest V3
+- Runtime model: popup-only (`action.default_popup`)
+- No background/service worker execution
+- OTP values are calculated while popup is open
 - Storage: `chrome.storage.local`
 - Crypto: Web Crypto API (`crypto.subtle`) for HMAC
-- OTP Standards:
+- OTP standards:
   - HOTP: RFC 4226
   - TOTP: RFC 6238
 
@@ -38,16 +46,35 @@ This project is built with plain HTML, CSS, and JavaScript, and is designed to r
 5. Click the extension icon to open the popup.
 
 ## Usage
+### Add manually
 1. Open the extension popup.
-2. Select **Add Key**.
-3. Enter a name and Base32 secret.
-4. Choose key type:
-   - **TOTP** for time-based codes
-   - **HOTP** for counter-based codes
-5. Save the key.
-6. Use **Edit** to update details or **Delete** to remove a key.
+2. Click **Add Key**.
+3. Select **Add new**.
+4. Enter name and Base32 secret.
+5. Choose type (**TOTP** or **HOTP**) and save.
 
-For HOTP keys, each **Generate** action increments the stored counter by one.
+### Add with URI
+1. Open the extension popup.
+2. Click **Add Key**.
+3. Select **Add with URI**.
+4. Paste an `otpauth://` URI and save.
+
+### Manage keys
+- Open the **⋯** menu on a key card to edit or delete.
+- Click the displayed OTP code to copy it.
+- For HOTP keys, click **Generate** to create the next code and increment counter.
+- Use the header switch to toggle light/dark mode.
+
+## URI Support Notes
+- Supported URI types: `totp`, `hotp`
+- Required parameter: `secret`
+- For imported TOTP keys, extension constraints are enforced:
+  - SHA1 only
+  - 6 digits only
+  - 30-second period only
+- For imported HOTP keys:
+  - Digits: 6 or 8
+  - Non-negative `counter` is required
 
 ## Security and Privacy Statement
 This extension is designed for local-only OTP generation. It does not include telemetry, remote APIs, analytics beacons, or server synchronization.

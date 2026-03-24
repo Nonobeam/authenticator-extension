@@ -3,14 +3,23 @@ import {
   addAccount,
   deleteAccountById,
   getAccounts,
+  getTheme,
   incrementHotpCounter,
+  saveTheme,
   updateAccount
 } from "../src/storage.js";
 import { validateAccountInput } from "../src/validation.js";
+import { parseOtpAuthUri } from "../src/otpauth.js";
 
 const addAccountButton = document.querySelector("#add-account-btn");
+const themeToggleButton = document.querySelector("#theme-toggle-btn");
 const accountsContainer = document.querySelector("#accounts-container");
 const messageElement = document.querySelector("#message");
+
+const addMethodDialog = document.querySelector("#add-method-dialog");
+const addNewButton = document.querySelector("#add-new-btn");
+const addUriButton = document.querySelector("#add-uri-btn");
+const addMethodCancelButton = document.querySelector("#add-method-cancel-btn");
 
 const accountDialog = document.querySelector("#account-dialog");
 const accountForm = document.querySelector("#account-form");
@@ -28,6 +37,12 @@ const hotpFieldGroup = document.querySelector("#hotp-field-group");
 const formError = document.querySelector("#form-error");
 const cancelButton = document.querySelector("#cancel-btn");
 
+const uriDialog = document.querySelector("#uri-dialog");
+const uriForm = document.querySelector("#uri-form");
+const uriInput = document.querySelector("#uri-input");
+const uriFormError = document.querySelector("#uri-form-error");
+const uriCancelButton = document.querySelector("#uri-cancel-btn");
+
 let accounts = [];
 const hotpDisplayCodes = new Map();
 let messageTimeoutId = null;
@@ -35,6 +50,7 @@ let tickerId = null;
 let isRendering = false;
 let renderAgain = false;
 let openMenuAccountId = null;
+let currentTheme = "light";
 
 function escapeHtml(value) {
   return String(value)
@@ -82,6 +98,39 @@ function clearFormError() {
   formError.classList.add("hidden");
 }
 
+function setUriFormError(text) {
+  uriFormError.textContent = text;
+  uriFormError.classList.remove("hidden");
+}
+
+function clearUriFormError() {
+  uriFormError.textContent = "";
+  uriFormError.classList.add("hidden");
+}
+
+function applyTheme(theme) {
+  currentTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", currentTheme);
+
+  if (themeToggleButton) {
+    const isDark = currentTheme === "dark";
+    themeToggleButton.setAttribute("aria-checked", isDark ? "true" : "false");
+    themeToggleButton.setAttribute("aria-label", "Toggle dark mode");
+    themeToggleButton.setAttribute("title", isDark ? "Dark mode" : "Light mode");
+  }
+}
+
+async function initTheme() {
+  const storedTheme = await getTheme();
+  applyTheme(storedTheme);
+}
+
+async function handleToggleTheme() {
+  const nextTheme = currentTheme === "dark" ? "light" : "dark";
+  applyTheme(nextTheme);
+  await saveTheme(nextTheme);
+}
+
 function toggleTypeFields() {
   const isTotp = accountTypeInput.value === "totp";
   totpFieldGroup.classList.toggle("hidden", !isTotp);
@@ -101,6 +150,10 @@ function toggleTypeFields() {
     if (accountDigitsLabel) {
       accountDigitsLabel.textContent = "Digits";
     }
+
+    if (accountDigitsInput.value !== "6" && accountDigitsInput.value !== "8") {
+      accountDigitsInput.value = "6";
+    }
   }
 }
 
@@ -115,12 +168,40 @@ function resetFormDefaults() {
   toggleTypeFields();
 }
 
+function resetUriFormDefaults() {
+  uriForm.reset();
+  clearUriFormError();
+}
+
+function openAddMethodDialog() {
+  hideAllMenus();
+
+  if (!addMethodDialog) {
+    openAddDialog();
+    return;
+  }
+
+  addMethodDialog.showModal();
+}
+
 function openAddDialog() {
   hideAllMenus();
   dialogTitle.textContent = "Add key";
   resetFormDefaults();
   accountDialog.showModal();
   accountLabelInput.focus();
+}
+
+function openUriDialog() {
+  hideAllMenus();
+
+  if (!uriDialog) {
+    return;
+  }
+
+  resetUriFormDefaults();
+  uriDialog.showModal();
+  uriInput.focus();
 }
 
 function openEditDialog(accountId) {
@@ -139,7 +220,7 @@ function openEditDialog(accountId) {
   accountSecretInput.value = account.secretBase32;
   accountTypeInput.value = account.type;
   accountDigitsInput.value = String(account.digits);
-  accountPeriodInput.value = String(account.period);
+  accountPeriodInput.value = "30";
   accountCounterInput.value = String(account.counter);
   toggleTypeFields();
   accountDialog.showModal();
@@ -164,7 +245,6 @@ function normalizeAccount(account) {
   const type = account?.type === "hotp" ? "hotp" : "totp";
   const digitsInput = Number(account?.digits);
   const digits = type === "totp" ? 6 : digitsInput === 8 ? 8 : 6;
-  const period = 30;
   const counterInput = Number(account?.counter);
   const counter = Number.isInteger(counterInput) && counterInput >= 0 ? counterInput : 0;
 
@@ -174,7 +254,7 @@ function normalizeAccount(account) {
     secretBase32: String(account.secretBase32 || ""),
     type,
     digits,
-    period,
+    period: 30,
     counter,
     algorithm: "SHA-1",
     createdAt: Number(account.createdAt || Date.now()),
@@ -302,6 +382,28 @@ async function renderAccounts() {
   }
 }
 
+function buildRawInputFromForm() {
+  return {
+    label: accountLabelInput.value,
+    secretBase32: accountSecretInput.value,
+    type: accountTypeInput.value,
+    digits: accountDigitsInput.value,
+    period: accountPeriodInput.value,
+    counter: accountCounterInput.value
+  };
+}
+
+function buildRawInputFromUri(parsed) {
+  return {
+    label: parsed.label,
+    secretBase32: parsed.secretBase32,
+    type: parsed.type,
+    digits: String(parsed.digits),
+    period: String(parsed.period),
+    counter: String(parsed.counter)
+  };
+}
+
 async function handleSaveAccount(event) {
   event.preventDefault();
   clearFormError();
@@ -309,15 +411,8 @@ async function handleSaveAccount(event) {
   const accountId = accountIdInput.value.trim();
 
   try {
-    const validated = validateAccountInput({
-      label: accountLabelInput.value,
-      secretBase32: accountSecretInput.value,
-      type: accountTypeInput.value,
-      digits: accountDigitsInput.value,
-      period: accountPeriodInput.value,
-      counter: accountCounterInput.value
-    });
-
+    const rawInput = buildRawInputFromForm();
+    const validated = validateAccountInput(rawInput);
     const now = Date.now();
 
     if (accountId) {
@@ -355,6 +450,33 @@ async function handleSaveAccount(event) {
     await renderAccounts();
   } catch (error) {
     setFormError(getErrorMessage(error, "Unable to save key."));
+  }
+}
+
+async function handleSaveUriAccount(event) {
+  event.preventDefault();
+  clearUriFormError();
+
+  try {
+    const parsedUri = parseOtpAuthUri(uriInput.value);
+    const rawInput = buildRawInputFromUri(parsedUri);
+    const validated = validateAccountInput(rawInput);
+    const now = Date.now();
+
+    const created = {
+      id: crypto.randomUUID(),
+      ...validated,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await addAccount(created);
+    uriDialog.close();
+    showMessage("Key added.");
+    await reloadAccounts();
+    await renderAccounts();
+  } catch (error) {
+    setUriFormError(getErrorMessage(error, "Unable to save key."));
   }
 }
 
@@ -501,10 +623,24 @@ function stopTicker() {
 }
 
 async function init() {
-  addAccountButton.addEventListener("click", openAddDialog);
+  await initTheme();
+
+  themeToggleButton?.addEventListener("click", handleToggleTheme);
+  addAccountButton.addEventListener("click", openAddMethodDialog);
+  addMethodCancelButton?.addEventListener("click", () => addMethodDialog.close());
+  addNewButton?.addEventListener("click", () => {
+    addMethodDialog.close();
+    openAddDialog();
+  });
+  addUriButton?.addEventListener("click", () => {
+    addMethodDialog.close();
+    openUriDialog();
+  });
   cancelButton.addEventListener("click", () => accountDialog.close());
+  uriCancelButton?.addEventListener("click", () => uriDialog.close());
   accountTypeInput.addEventListener("change", toggleTypeFields);
   accountForm.addEventListener("submit", handleSaveAccount);
+  uriForm?.addEventListener("submit", handleSaveUriAccount);
   accountsContainer.addEventListener("click", handleAccountsAction);
   accountsContainer.addEventListener("keydown", handleAccountsKeydown);
   document.addEventListener("click", (event) => {

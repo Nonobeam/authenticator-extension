@@ -10,13 +10,34 @@
     <main class="app">
       <header class="app-header">
         <h1>Local Authenticator</h1>
-        <button id="add-account-btn" class="btn btn-primary" type="button">Add Key</button>
+        <div class="header-actions">
+          <button id="theme-toggle-btn" class="theme-switch" type="button" role="switch" aria-checked="false" aria-label="Toggle dark mode">
+            <span class="theme-switch-track" aria-hidden="true">
+              <span class="theme-switch-thumb"></span>
+            </span>
+          </button>
+          <button id="add-account-btn" class="btn btn-primary" type="button">Add Key</button>
+        </div>
       </header>
 
       <p id="message" class="message hidden" role="status" aria-live="polite"></p>
 
       <section id="accounts-container" class="accounts" aria-live="polite"></section>
     </main>
+
+    <dialog id="add-method-dialog" class="account-dialog add-method-dialog">
+      <div class="add-method-body">
+        <h2>Add key</h2>
+        <p class="add-method-help">Choose how you want to add a key.</p>
+        <div class="add-method-actions">
+          <button id="add-new-btn" class="btn btn-primary" type="button">Add new</button>
+          <button id="add-uri-btn" class="btn" type="button">Add with URI</button>
+        </div>
+        <div class="dialog-actions">
+          <button id="add-method-cancel-btn" class="btn" type="button">Cancel</button>
+        </div>
+      </div>
+    </dialog>
 
     <dialog id="account-dialog" class="account-dialog">
       <form id="account-form" class="account-form" method="dialog" novalidate>
@@ -55,6 +76,22 @@
 
         <div class="dialog-actions">
           <button id="cancel-btn" class="btn" type="button">Cancel</button>
+          <button class="btn btn-primary" type="submit">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="uri-dialog" class="account-dialog">
+      <form id="uri-form" class="account-form" method="dialog" novalidate>
+        <h2>Add key with URI</h2>
+
+        <label for="uri-input">otpauth URI</label>
+        <textarea id="uri-input" name="uri" rows="3" placeholder="otpauth://totp/..." spellcheck="false" required></textarea>
+
+        <p id="uri-form-error" class="error hidden" role="alert"></p>
+
+        <div class="dialog-actions">
+          <button id="uri-cancel-btn" class="btn" type="button">Cancel</button>
           <button class="btn btn-primary" type="submit">Save</button>
         </div>
       </form>
